@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<section name="Workbench">
+	<item key="hasShownOverlayPopupBefore" value="true"/>
+	<item key="replaceBarOpen" value="false"/>
+	<list key="searchhistory">
+		<item value="EXTI15"/>
+		<item value="exti"/>
+		<item value="adc_start"/>
+		<item value="poll"/>
+		<item value="temp_c"/>
+		<item value="raw"/>
+		<item value="current "/>
+		<item value="conv"/>
+		<item value="HAL_TIM_PWM_Start"/>
+		<item value="        &#x09;HAL_TIM_PWM_Start(&amp;htim1,TIM_CHANNEL_1);"/>
+		<item value="ADC_HandleTypeDef"/>
+		<item value="HAL_ADC_ConvCpltCallback"/>
+		<item value="PeriodElapsedCallback"/>
+		<item value="callback"/>
+		<item value="start"/>
+	</list>
+</section>

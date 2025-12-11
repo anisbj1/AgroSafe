@@ -1,0 +1,320 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file    : main.c
+  @brief   : Main program body - Fire + Temperature + Analog Soil Moisture System
+  ******************************************************************************
+  Copyright (c) 2025 STMicroelectronics. All rights reserved.
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+#include <stdbool.h>          // <-- needed for bool, true, false
+#include "liquidcrystal_i2c.h" // <-- your LCD driver
+
+/* Private typedef -----------------------------------------------------------*/
+typedef enum {
+    MODE_JOUR = 0,
+    MODE_NUIT
+} ModeLuminosite;
+
+/* Private define ------------------------------------------------------------*/
+#define SOIL_DRY_THRESHOLD_PERCENT  40.0f
+#define MAX_ALERTS                  5
+
+typedef enum {
+    ALERT_FLAMME = 1,
+    ALERT_TEMP_HAUTE,
+    ALERT_SOL_SEC
+} alert_type_t;
+
+/* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+DMA_HandleTypeDef hdma_adc1;
+
+I2C_HandleTypeDef hi2c1;
+DMA_HandleTypeDef hdma_i2c1_tx;
+
+TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim6;
+TIM_HandleTypeDef htim7;
+
+/* USER CODE BEGIN PV */
+float current_temperature = 0.0f;
+int status = 0;
+int buzzer_on = 0;
+int flame_buzzer = 0;
+ModeLuminosite currentMode = MODE_JOUR;
+
+uint16_t adc_buffer[2];      // [0] = Temp (IN6 - PA6), [1] = Soil moisture (IN7 - PA7)
+uint8_t flag = 0;
+/* USER CODE END PV */
+
+/* Private function prototypes -----------------------------------------------*/
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
+static void MX_I2C1_Init(void);
+static void MX_TIM1_Init(void);
+static void MX_TIM6_Init(void);
+static void MX_ADC1_Init(void);
+static void MX_TIM7_Init(void);
+
+void Log_Alert(alert_type_t type);
+void Show_Last_Two_Alerts(void);
+
+/* USER CODE BEGIN 0 */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+    if (GPIO_Pin == Button_Pin)
+    {
+        status = !status;
+        if (status)
+        {
+            HAL_GPIO_WritePin(GPIOD, Green_Pin, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(GPIOD, Blue_Pin | Orange_Pin | Red_Pin, GPIO_PIN_RESET);
+            HD44780_Clear();
+            HD44780_SetCursor(0,0);
+            HD44780_PrintStr("SYSTEM");
+            HD44780_SetCursor(0,1);
+            HD44780_PrintStr("ON");
+        }
+        else
+        {
+            HAL_GPIO_WritePin(GPIOD, Green_Pin | Blue_Pin | Orange_Pin | Red_Pin, GPIO_PIN_RESET);
+            HD44780_Clear();
+            HD44780_SetCursor(0,0);
+            HD44780_PrintStr("SYSTEM");
+            HD44780_SetCursor(0,1);
+            HD44780_PrintStr("OFF");
+        }
+    }
+
+    // LDR (day/night mode)
+    if ((GPIO_Pin == GPIO_PIN_0) && status)
+    {
+        GPIO_PinState ldrState = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
+        if (ldrState != GPIO_PIN_SET) // light → day
+        {
+            currentMode = MODE_JOUR;
+            HAL_GPIO_WritePin(GPIOD, Blue_Pin, GPIO_PIN_RESET);
+            HD44780_Clear();
+            HD44780_SetCursor(0,0);
+            HD44780_PrintStr("Mode jour active");
+            HD44780_SetCursor(0,1);
+            HD44780_PrintStr("Lumiere forte");
+        }
+        else // dark → night
+        {
+            currentMode = MODE_NUIT;
+            HAL_GPIO_WritePin(GPIOD, Blue_Pin, GPIO_PIN_SET);
+            HD44780_Clear();
+            HD44780_SetCursor(0,0);
+            HD44780_PrintStr("Mode nuit active");
+            HD44780_SetCursor(0,1);
+            HD44780_PrintStr("Lumiere faible");
+        }
+    }
+
+    // Alert button pressed
+    if ((GPIO_Pin == Alert_Pin) && status)
+    {
+        flag = 1;
+    }
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM6)
+    {
+        HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, 2); // 2 channels
+    }
+    else if (htim->Instance == TIM7)
+    {
+        // Auto-stop buzzer and actuators after ~3 seconds
+        HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_1);
+        HAL_GPIO_WritePin(GPIOD, Blue_Pin | Orange_Pin | Red_Pin, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(GPIOE, Pompe_Pin | Ventilateur_Pin, GPIO_PIN_RESET);
+        buzzer_on = 0;
+        flame_buzzer = 0;
+        HAL_TIM_Base_Stop_IT(&htim7);
+    }
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+    if (hadc->Instance == ADC1 && status)
+    {
+        uint16_t raw_temp = adc_buffer[0];  // Channel 6 (PA6)
+        uint16_t raw_soil = adc_buffer[1];  // Channel 7 (PA7)
+
+        float voltage_temp = (raw_temp * 3.3f) / 4095.0f;
+        float current_temperature = (voltage_temp - 0.76f) * 100.0f; // LM35
+
+        // Soil moisture sensor: higher voltage = drier soil
+        float soil_moisture_percent = (1.0f - (raw_soil / 4095.0f)) * 100.0f;
+        bool soil_is_dry = (soil_moisture_percent < SOIL_DRY_THRESHOLD_PERCENT);
+
+        char line1[17] = {0};
+        char line2[17] = {0};
+
+        GPIO_PinState flame = HAL_GPIO_ReadPin(Flame_GPIO_Port, Flame_Pin);
+
+        // === PRIORITY 1: FLAME ===
+        if (flame == GPIO_PIN_RESET)
+        {
+            snprintf(line1, 17, "!!! FLAMME !!!");
+            snprintf(line2, 17, "ARRET SYSTEME");
+            HAL_GPIO_WritePin(GPIOD, Red_Pin, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(GPIOD, Green_Pin | Blue_Pin | Orange_Pin, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(GPIOE, Pompe_Pin | Ventilateur_Pin, GPIO_PIN_RESET);
+            HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+            buzzer_on = 1;
+            flame_buzzer = 1;
+            Log_Alert(ALERT_FLAMME);
+            HAL_TIM_Base_Start_IT(&htim7);
+        }
+        // === PRIORITY 2: DRY SOIL ===
+        else if (soil_is_dry)
+        {
+            snprintf(line1, 17, "Sol sec %.0f%%", soil_moisture_percent);
+            snprintf(line2, 17, "Pompe active");
+            HAL_GPIO_WritePin(GPIOD, Orange_Pin, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(GPIOD, Green_Pin | Blue_Pin | Red_Pin, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(GPIOE, Pompe_Pin, GPIO_PIN_SET);
+            HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+            buzzer_on = 1;
+            Log_Alert(ALERT_SOL_SEC);
+            HAL_TIM_Base_Start_IT(&htim7);
+        }
+        // === PRIORITY 3: HIGH TEMPERATURE ===
+        else if (current_temperature > 35.0f)
+        {
+            snprintf(line1, 17, "TEMP: %.1fC", current_temperature);
+            snprintf(line2, 17, "VENTILATEUR ON");
+            HAL_GPIO_WritePin(GPIOD, Blue_Pin, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(GPIOE, Ventilateur_Pin, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(GPIOD, Orange_Pin | Red_Pin, GPIO_PIN_RESET);
+            buzzer_on = 1;
+            Log_Alert(ALERT_TEMP_HAUTE);
+            HAL_TIM_Base_Start_IT(&htim7);
+        }
+        // === ALL OK ===
+        else
+        {
+            snprintf(line1, 17, "T:%.1fC H:%.0f%%", current_temperature, soil_moisture_percent);
+            snprintf(line2, 17, "Systeme OK");
+            HAL_GPIO_WritePin(GPIOD, Green_Pin, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(GPIOD, Blue_Pin | Orange_Pin | Red_Pin, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(GPIOE, Pompe_Pin | Ventilateur_Pin, GPIO_PIN_RESET);
+        }
+
+        HD44780_Clear();
+        HD44780_SetCursor(0,0);
+        HD44780_PrintStr(line1);
+        HD44780_SetCursor(0,1);
+        HD44780_PrintStr(line2);
+    }
+}
+/* USER CODE END 0 */
+
+int main(void)
+{
+    HAL_Init();
+    SystemClock_Config();
+
+    MX_GPIO_Init();
+    MX_DMA_Init();
+    MX_I2C1_Init();
+    MX_TIM1_Init();
+    MX_TIM6_Init();
+    MX_ADC1_Init();
+    MX_TIM7_Init();
+
+    HAL_TIM_Base_Start_IT(&htim6);
+
+    HD44780_Init(2);
+    HD44780_Clear();
+    HD44780_SetCursor(0,0);
+    HD44780_PrintStr("Appuyer sur");
+    HD44780_SetCursor(0,1);
+    HD44780_PrintStr("le button");
+
+    while (1)
+    {
+        if (flag == 1)
+        {
+            flag = 0;
+            Show_Last_Two_Alerts();
+        }
+
+        // Optional visual feedback on Alert_Pin (you can remove if not needed)
+        if (HAL_GPIO_ReadPin(GPIOC, Alert_Pin) == GPIO_PIN_RESET)
+            HAL_GPIO_WritePin(GPIOD, Blue_Pin, GPIO_PIN_SET);
+        else
+            HAL_GPIO_WritePin(GPIOD, Blue_Pin, GPIO_PIN_RESET);
+
+        // Buzzer short beep handling (already handled by TIM7 now, but kept for compatibility)
+        if (buzzer_on || flame_buzzer)
+        {
+            HAL_Delay(200);
+            HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_1);
+            buzzer_on = 0;
+            flame_buzzer = 0;
+        }
+    }
+}
+
+/* === Rest of your generated init functions remain unchanged === */
+// (SystemClock_Config, MX_ADC1_Init, MX_GPIO_Init, etc...)
+// I kept them exactly as you posted - they are correct
+
+/* USER CODE BEGIN 4 */
+uint8_t alert_log[MAX_ALERTS] __attribute__((section(".ccmram")));
+uint8_t alert_idx = 0;
+uint8_t alert_cnt = 0;
+
+void Log_Alert(alert_type_t type)
+{
+    alert_log[alert_idx] = type;
+    alert_idx = (alert_idx + 1) % MAX_ALERTS;
+    if (alert_cnt < MAX_ALERTS) alert_cnt++;
+}
+
+void Show_Last_Two_Alerts(void)
+{
+    HD44780_Clear();
+    if (alert_cnt == 0)
+    {
+        HD44780_SetCursor(0,0);
+        HD44780_PrintStr(" SYSTEME OK ");
+        return;
+    }
+
+    uint8_t last = (alert_idx == 0) ? MAX_ALERTS-1 : alert_idx-1;
+    uint8_t prev = (last == 0) ? MAX_ALERTS-1 : last-1;
+
+    const char* msg1 = "???";
+    const char* msg2 = "???";
+
+    switch(alert_log[last])
+    {
+        case ALERT_FLAMME:      msg1 = "!!! FLAMME !!!"; break;
+        case ALERT_TEMP_HAUTE:  msg1 = "TEMP TROP HAUTE"; break;
+        case ALERT_SOL_SEC:     msg1 = " !! SOL SEC !! "; break;
+    }
+    switch(alert_log[prev])
+    {
+        case ALERT_FLAMME:      msg2 = "!!! FLAMME !!!"; break;
+        case ALERT_TEMP_HAUTE:  msg2 = "TEMP TROP HAUTE"; break;
+        case ALERT_SOL_SEC:     msg2 = " !! SOL SEC !! "; break;
+    }
+
+    HD44780_SetCursor(0,0);
+    HD44780_PrintStr(msg1);
+    HD44780_SetCursor(0,1);
+    HD44780_PrintStr(msg2);
+}
+/* USER CODE END 4 */

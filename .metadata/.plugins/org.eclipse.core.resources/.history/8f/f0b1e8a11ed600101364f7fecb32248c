@@ -1,0 +1,6 @@
+../Core/Src/main.c:71:6:HAL_GPIO_EXTI_Callback	16	static
+../Core/Src/main.c:122:6:HAL_TIM_PeriodElapsedCallback	16	static
+../Core/Src/main.c:141:6:HAL_ADC_ConvCpltCallback	96	static
+../Core/Src/main.c:214:5:main	8	static
+../Core/Src/main.c:271:6:Log_Alert	16	static
+../Core/Src/main.c:278:6:Show_Last_Two_Alerts	24	static

@@ -3,20 +3,20 @@
 	<item key="hasShownOverlayPopupBefore" value="true"/>
 	<item key="replaceBarOpen" value="false"/>
 	<list key="searchhistory">
-		<item value="EXTI15"/>
-		<item value="exti"/>
-		<item value="adc_start"/>
-		<item value="poll"/>
-		<item value="temp_c"/>
-		<item value="raw"/>
-		<item value="current "/>
-		<item value="conv"/>
-		<item value="HAL_TIM_PWM_Start"/>
-		<item value="        &#x09;HAL_TIM_PWM_Start(&amp;htim1,TIM_CHANNEL_1);"/>
-		<item value="ADC_HandleTypeDef"/>
-		<item value="HAL_ADC_ConvCpltCallback"/>
-		<item value="PeriodElapsedCallback"/>
+		<item value="convcplt"/>
+		<item value="MX_TIM7"/>
+		<item value="delay"/>
+		<item value="alert"/>
+		<item value="show"/>
+		<item value="while"/>
+		<item value="alert_pin"/>
+		<item value="MODE_JOUR"/>
+		<item value="show_last"/>
+		<item value="current_temperature"/>
+		<item value="show_last_"/>
+		<item value="soil_percentage"/>
+		<item value="oil_percentage"/>
 		<item value="callback"/>
-		<item value="start"/>
+		<item value="sol"/>
 	</list>
 </section>

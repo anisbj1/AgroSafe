@@ -1,25 +1,25 @@
-02:16:09 **** Incremental Build of configuration Debug for project Projet_scenario_1 ****
+05:51:09 **** Incremental Build of configuration Debug for project Projet_scenario_1 ****
 make -j4 all 
 arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F407xx -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
 ../Core/Src/main.c: In function 'main':
-../Core/Src/main.c:353:15: warning: implicit declaration of function 'Show_Last_Two_Alerts' [-Wimplicit-function-declaration]
-  353 |               Show_Last_Two_Alerts();
+../Core/Src/main.c:395:15: warning: implicit declaration of function 'Show_Last_Two_Alerts' [-Wimplicit-function-declaration]
+  395 |               Show_Last_Two_Alerts();
       |               ^~~~~~~~~~~~~~~~~~~~
 ../Core/Src/main.c: At top level:
-../Core/Src/main.c:886:6: warning: conflicting types for 'Show_Last_Two_Alerts'; have 'void(void)'
-  886 | void Show_Last_Two_Alerts(void)
+../Core/Src/main.c:928:6: warning: conflicting types for 'Show_Last_Two_Alerts'; have 'void(void)'
+  928 | void Show_Last_Two_Alerts(void)
       |      ^~~~~~~~~~~~~~~~~~~~
-../Core/Src/main.c:353:15: note: previous implicit declaration of 'Show_Last_Two_Alerts' with type 'void(void)'
-  353 |               Show_Last_Two_Alerts();
+../Core/Src/main.c:395:15: note: previous implicit declaration of 'Show_Last_Two_Alerts' with type 'void(void)'
+  395 |               Show_Last_Two_Alerts();
       |               ^~~~~~~~~~~~~~~~~~~~
 arm-none-eabi-gcc -o "Projet_scenario_1.elf" @"objects.list"   -mcpu=cortex-m4 -T"C:\Users\Doublism\Desktop\2222\Projet_scenario_1\STM32F407VGTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Projet_scenario_1.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -u _printf_float -Wl,--start-group -lc -lm -Wl,--end-group
 Finished building target: Projet_scenario_1.elf
  
 arm-none-eabi-size  Projet_scenario_1.elf 
 arm-none-eabi-objdump -h -S Projet_scenario_1.elf  > "Projet_scenario_1.list"
-   text	   data	    bss	    dec	    hex	filename
-  38644	    492	   2684	  41820	   a35c	Projet_scenario_1.elf
 arm-none-eabi-objcopy  -O ihex Projet_scenario_1.elf  "Projet_scenario_1.hex"
+   text	   data	    bss	    dec	    hex	filename
+  41244	    492	   2692	  44428	   ad8c	Projet_scenario_1.elf
 Finished building: default.size.stdout
  
 Finished building: Projet_scenario_1.hex
@@ -27,5 +27,5 @@ Finished building: Projet_scenario_1.hex
 Finished building: Projet_scenario_1.list
  
 
-02:16:10 Build Finished. 0 errors, 2 warnings. (took 1s.434ms)
+05:51:11 Build Finished. 0 errors, 2 warnings. (took 1s.335ms)
 
